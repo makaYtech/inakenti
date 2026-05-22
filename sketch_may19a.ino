@@ -12,14 +12,22 @@ const int BTN_VOL = 4;
 // --- Состояния кнопок ---
 bool lastNext = HIGH, lastPrev = HIGH, lastPlay = HIGH, lastVol = HIGH;
 unsigned long playPressTime = 0;
+unsigned long volPressTime = 0;
 bool longPressSent = false;
+bool longPressSentVol = false;
 const unsigned long LONG_PRESS_MS = 800;
 const unsigned long DEBOUNCE_MS = 50;
 unsigned long lastDebounce = 0;
 
-// --- Состояние рукопожатия
-bool pcReady = false;
-unsigned long lastInitSend = 0;
+enum LinkState {
+  WAIT_SYN,
+  WAIT_ACK,
+  CONNECTED
+};
+LinkState linkState = WAIT_SYN;
+
+const unsigned long CONNECTION_TIMEOUT = 3000;
+unsigned long lastRecvTime = 0;
 
 void setup() {
   Serial.begin(115200);
@@ -29,47 +37,94 @@ void setup() {
   pinMode(BTN_PREV, INPUT_PULLUP);
   pinMode(BTN_PLAY, INPUT_PULLUP);
   pinMode(BTN_VOL, INPUT_PULLUP);
+  lastRecvTime = millis();
 }
 
 void loop() {
-  if (!pcReady) {
-    if (millis() - lastInitSend > 300) {
-      Serial.println("INITED");
-      lastInitSend = millis();
-    }
-    if (Serial.available() > 0) {
-      while (Serial.available()) Serial.read();
-      pcReady = true;
-      lcd.clear();
-      lcd.setCursor(0, 0); lcd.print("PC Connected!");
-      delay(1000);
-      lcd.clear();
-    }
-    return;
-  }
-  handleSerial();
-  handleInputs();
-}
-
-// 🔹 Чтение и отображение данных от ПК
-void handleSerial() {
   while (Serial.available()) {
     char c = Serial.read();
+    lastRecvTime = millis();   // фиксируем активность
+
     if (c == '\n' || c == '\r') {
-      if (buffer == "EXIT") {
-        pcReady = false;
-        lcd.clear();
-        lcd.setCursor(0, 0); lcd.print("Waiting PC...");
-        buffer = "";
-        return;
-      }
-      if (buffer.length() > 0) displayLCD(buffer);
+      if (buffer.length() == 0) continue;
+
+      String cmd = buffer;
       buffer = "";
+
+      // Обработка в зависимости от состояния
+      switch (linkState) {
+        case WAIT_SYN:
+          if (cmd == "SYN") {
+            Serial.println("SYN_ACK");
+            linkState = WAIT_ACK;
+            lcd.clear();
+            lcd.print("Handshaking...");
+          }
+          break;
+
+        case WAIT_ACK:
+          if (cmd == "ACK") {
+            linkState = CONNECTED;
+            lcd.clear();
+            lcd.print("Connected");
+            delay(500);
+            lcd.clear();
+          }
+          // Если не ACK, остаёмся в WAIT_ACK (ждём ещё)
+          break;
+
+        case CONNECTED:
+          if (cmd == "PING") {
+            Serial.println("PONG");
+          } else if (cmd == "EXIT") {
+            // ПК вежливо отключается
+            linkState = WAIT_SYN;
+            lcd.clear();
+            lcd.print("Waiting PC...");
+          } else {
+            // Обычные данные дисплея
+            displayLCD(cmd);
+          }
+          break;
+      }
     } else {
       buffer += c;
     }
   }
+  if (linkState == WAIT_ACK || linkState == CONNECTED) {
+    if (millis() - lastRecvTime > CONNECTION_TIMEOUT) {
+      // Таймаут – возвращаемся в начальное состояние
+      linkState = WAIT_SYN;
+      lcd.clear();
+      lcd.print("Waiting PC...");
+    }
+  }
+
+  // 3. Обработка кнопок (только когда связь установлена)
+  if (linkState == CONNECTED) {
+    handleInputs();
+  }
 }
+
+// 🔹 Чтение и отображение данных от ПК
+// void handleSerial() {
+//   while (Serial.available()) {
+//     char c = Serial.read();
+//     if (c == '\n' || c == '\r') {
+//       if (buffer == "EXIT") {
+//         pcReady = false;
+//         lcd.clear();
+//         lcd.setCursor(0, 0); lcd.print("Waiting PC...");
+//         buffer = "";
+//         return;
+//       }
+//       if (buffer.length() > 0) displayLCD(buffer);
+//       buffer = "";
+//     } else {
+//       buffer += c;
+//     }
+//   }
+// }
 
 void displayLCD(String buf) {
   int sep = buf.indexOf('|');
@@ -98,8 +153,22 @@ void handleInputs() {
   // Кнопки NEXT / PREV
   if (n == LOW && lastNext == HIGH) Serial.println("N");
   if (p == LOW && lastPrev == HIGH) Serial.println("P");
-  if (v == LOW && lastVol == HIGH) Serial.println("V");
+  // if (v == LOW && lastVol == HIGH) Serial.println("V");
 
+  if (v == LOW) {
+    if (volPressTime == 0) volPressTime = now;
+    else if (!longPressSentVol && now - volPressTime >= LONG_PRESS_MS) {
+      Serial.println("LIKE");
+      longPressSentVol = true;
+    }
+  } else {
+    if (volPressTime > 0 && !longPressSentVol && now - volPressTime >= 50) {
+      Serial.println("V");
+    }
+    volPressTime = 0;
+    longPressSentVol = false;
+  }
+  
   // PLAY: короткое = C, долгое = MODE
   if (c == LOW) {
     if (playPressTime == 0) playPressTime = now;
