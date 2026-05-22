@@ -34,7 +34,7 @@ sp = spotipy.Spotify(auth_manager=SpotifyOAuth(
     client_secret=SPOTIFY_CLIENT_SECRET,
     redirect_uri=SPOTIFY_REDIRECT_URI,
     scope="user-library-modify user-follow-modify playlist-modify-public user-library-read user-read-currently-playing",
-    cache_path="/tmp/spotify_cache"
+    cache_path="./spotify_cache"
 ))
 
 def like_track(track_id: str) -> str:
