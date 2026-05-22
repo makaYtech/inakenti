@@ -41,7 +41,7 @@ def build_player_display(state, player) -> str:
     state.scroll_offset = new_offset  # обновим offset в состоянии (имеет побочный эффект)
 
     l0 = frame.ljust(16)
-
+    
     if state.volume_change:
         l1 = f"{icon}  \x93 CVol: {vol_str}".ljust(16)
     else:

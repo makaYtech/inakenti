@@ -78,7 +78,7 @@ class PlayerController:
         result = self.spotify.like_track(track_uri)
         if result == "like":
             state.liked = "like"
-            state.has_like = False
+            state.has_like = True
         elif result == "unlike":
             state.liked = "unlike"
             state.has_like = False

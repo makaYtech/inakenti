@@ -23,4 +23,3 @@ class AppState:
 
     def reset_like_status(self):
         self.liked = ""
-        self.has_like = False
