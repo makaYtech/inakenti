@@ -13,6 +13,13 @@ BAUD = 115200
 FRAME_DELAY = 0.25
 RETRY_DELAY = 5
 
+# HANDSHAKE
+HANDSHAKE_TIMEOUT = 3
+PING_INTERVAL = 1
+PONG_TIMEOUT = 0.5
+MAX_MISSED_PONGS = 3
+
+# SPOTIFY
 load_dotenv()
 SPOTIFY_CLIENT_ID = os.getenv("SPOTIFY_CLIENT_ID")
 SPOTIFY_CLIENT_SECRET = os.getenv("SPOTIFY_CLIENT_SECRET")
@@ -144,6 +151,7 @@ def marquee(text, offset, width):
 
 # МАРШРУТИЗАЦИЯ КОМАНД
 def route_cmd(cmd):
+    cmd = cmd.strip()
     global state
     if cmd == "MODE":
         state["mode"] = "SERVICE" if state["mode"] == "PLAYER" else "PLAYER"
@@ -267,67 +275,89 @@ def get_curent_volume():
     except: pass
     return None
 
-def wait_for_init(ser, timeout = 3.0):
-    start = time.time()
-    buf = b""
-    while time.time() - start < timeout:
-        try:
-            if ser.in_waiting > 0:
-                buf += ser.read(ser.in_waiting)
-                if b"INITED" in buf:
-                    return True
-        except (serial.SerialException, OSError): return False
-        time.sleep(0.5)
-    return False
+def do_handshake(ser):
+    try:
+        ser.reset_input_buffer()
+        ser.reset_output_buffer()
+        ser.timeout = HANDSHAKE_TIMEOUT
+
+        ser.write(b"SYN\n")
+        start = time.time()
+        while time.time() - start < HANDSHAKE_TIMEOUT:
+            line = ser.readline().decode('latin-1', errors='ignore')
+            if not line: continue
+            print(line)
+            if "SYN_ACK" in line:
+                ser.write(b"ACK\n")
+                return True
+
+    except (serial.SerialException, OSError) as e: 
+        print(e)
+        return False
 
 def try_connection():
     try:
         s = serial.Serial(PORT, BAUD, timeout=0.1)
         print("Port is open")
         time.sleep(0.5)
-        if wait_for_init(s):
-            print("LCD Inited")
+        if do_handshake(s):
+            print("Handshake OK")
             return s
         else:
-            print("LCD Not Inited")
+            print("Handshake Failed")
             s.close()
             return None
-    except serial.SerialException:
-        return None
+    except serial.SerialException: return None
 
 # MAIN
 if __name__ == "__main__":
     ser = None
-    retries = 0
+    retry_time = 0
+    last_ping = 0
+    last_pong = 0
+
     try:
         while True:
             if ser is None or not ser.is_open:
                 now = time.time()
-                if now - retries > RETRY_DELAY:
+                if now - retry_time > RETRY_DELAY:
                     ser = try_connection()
                     if ser:
-                        state["last_vol"] = -1
                         state["last_track"] = ""
+                        last_pong = now
+                        last_ping = now
                         print("LCD Reconnected")
                     retries = now
                 time.sleep(0.5)
                 continue
 
             try:
-                if ser.in_waiting > 0:
-                    raw = ser.read(ser.in_waiting).decode('utf-8', errors='ignore')
-                    for line in raw.splitlines():
-                        cmd = line.strip()
-                        if cmd: route_cmd(cmd)
+                while ser.in_waiting > 0:
+                    line = ser.readline().decode('latin-1', errors='ignore')
+                    if not line: continue
+                    last_pong = time.time()
+                    if "PONG" in line:
+                        pass
+                    else:
+                        route_cmd(line)
                 update_display()
-            except (serial.SerialException, OSError):
+
+                now = time.time()
+                if now - last_ping > PING_INTERVAL:
+                    ser.write(b"PING\n")
+                    last_ping = now
+
+                if now - last_pong > MAX_MISSED_PONGS * PONG_TIMEOUT:
+                    raise serial.SerialException("Keep-alive timeout")
+                time.sleep(FRAME_DELAY)
+            except (serial.SerialException, OSError) as e:
                 print("LCD Disconnected")
-                try: ser.close()
-                except: pass
+                try:
+                    ser.close()
+                except:
+                    pass
                 ser = None
                 continue
-            time.sleep(FRAME_DELAY)
-
     except KeyboardInterrupt:
         print("\n Disconnecting...")
     finally:
