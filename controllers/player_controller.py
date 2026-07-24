@@ -1,4 +1,5 @@
 import subprocess
+import re
 from services.spotify_service import SpotifyService
 from core.state_manager import AppState
 
@@ -51,11 +52,19 @@ class PlayerController:
     def get_volume(self) -> str:
         try:
             r = subprocess.run(
-                ["pamixer", "--get-volume"],
+                ["wpctl", "get-volume", "@DEFAULT_AUDIO_SINK@"],
                 capture_output=True, text=True, timeout=2
             )
             if r.returncode == 0:
-                return r.stdout.strip()
+                output = r.stdout.strip()
+                # Ищем число с плавающей точкой (например, 0.45)
+                match = re.search(r'(\d+\.\d+)', output)
+                if match:
+                    vol_float = float(match.group(1))
+                    vol_percent = int(vol_float * 100)   # переводим в проценты
+                    return str(vol_percent)
+                else:
+                    return "--"
         except Exception:
             pass
         return "--"
@@ -75,6 +84,8 @@ class PlayerController:
 
     # --- Лайки ---
     def like_current_track(self, track_uri: str, state: AppState):
+        if self.spotify is None:
+            return
         result = self.spotify.like_track(track_uri)
         if result == "like":
             state.liked = "like"
@@ -90,5 +101,7 @@ class PlayerController:
         if track and track != state.last_track:
             state.last_track = track
             state.scroll_offset = 0
-            # проверить лайк при смене трека
-            state.has_like = self.spotify.is_liked(state.current_track_uri)
+            if self.spotify is not None:
+                state.has_like = self.spotify.is_liked(state.current_track_uri)
+            else:
+                state.has_like = False

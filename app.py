@@ -15,9 +15,15 @@ from controllers.system_controller import SystemController
 def main():
     state = AppState()
     serial = SerialHandler()
-    spotify = SpotifyService()
-    player = PlayerController(spotify)
     system = SystemController()
+    try:
+        spotify = SpotifyService()
+        print("Spotify service initialized")
+    except Exception as e:
+        print(f"Warning: Spotify service unavailable: {e}")
+        print("Continuing without Spotify features (likes disabled).")
+        spotify = None
+    player = PlayerController(spotify)
 
     retry_time = 0.0
 
