@@ -84,7 +84,7 @@ class PlayerController:
 
     # --- Лайки ---
     def like_current_track(self, track_uri: str, state: AppState):
-        if self.spotify is None:
+        if self.spotify is None or not track_uri:
             return
         result = self.spotify.like_track(track_uri)
         if result == "like":

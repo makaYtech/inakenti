@@ -29,8 +29,8 @@ class SerialHandler:
             else:
                 print("Handshake Failed")
                 s.close()
-        except serial.SerialException:
-            pass
+        except (serial.SerialException, OSError, ValueError) as e:
+            print(f"Connect failed: {e}")
         return False
 
     def disconnect(self):
@@ -44,11 +44,15 @@ class SerialHandler:
         self.ser = None
 
     def write_line(self, msg: str):
-        """Безопасно отправить строку на LCD (latin-1)."""
         if not self.ser or not self.ser.is_open:
             return
         try:
-            self.ser.write(msg.encode('latin-1'))
+            payload = msg.encode('latin-1')
+        except UnicodeEncodeError:
+            # заменяем символы, которые не влезли в latin-1, на '?'
+            payload = msg.encode('latin-1', errors='replace')
+        try:
+            self.ser.write(payload)
         except (serial.SerialException, OSError):
             self.ser = None
 
