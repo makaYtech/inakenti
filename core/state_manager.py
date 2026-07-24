@@ -8,6 +8,7 @@ class AppState:
         self.volume_change = False
         self.liked = ""            # "", "like", "unlike"
         self.has_like = False
+        self.display_track = ""
 
     def toggle_mode(self):
         if self.mode == "PLAYER":

@@ -2,6 +2,7 @@ import subprocess
 import re
 from services.spotify_service import SpotifyService
 from core.state_manager import AppState
+from core.display import transliterate
 
 class PlayerController:
     def __init__(self, spotify: SpotifyService):
@@ -36,6 +37,20 @@ class PlayerController:
         except Exception:
             pass
         return None
+
+    def get_display_metadata(self, raw_fallback: str | None) -> str | None:
+        """
+        Готовая строка 'Artist - Title' для показа на LCD.
+        Если доступен Spotify API — берём оттуда настоящие символы и сами
+        транслитерируем. Если нет — берём playerctl как есть (он уже в латинице).
+        """
+        if self.spotify is not None:
+            meta = self.spotify.get_current_track_meta()
+            if meta:
+                artist, title = meta
+                raw = f"{artist} - {title}".strip(" -")
+                return transliterate(raw)
+        return transliterate(raw_fallback) if raw_fallback else None
 
     def get_status(self) -> str | None:
         try:
@@ -95,13 +110,18 @@ class PlayerController:
             state.has_like = False
 
     def refresh_track_state(self, state: AppState):
-        """Обновить состояние, связанное с текущим треком (скролл, URI, лайк)."""
-        track = self.get_metadata()
+        """Обновить состояние, связанное с текущим треком (скролл, URI, лайк, текст на экране)."""
+        raw_track = self.get_metadata()  # дешёвый локальный вызов playerctl — только для детекта смены трека
         state.current_track_uri = self.get_track_uri()
-        if track and track != state.last_track:
-            state.last_track = track
+
+        if raw_track and raw_track != state.last_track:
+            state.last_track = raw_track
             state.scroll_offset = 0
-            if self.spotify is not None:
+            state.display_track = self.get_display_metadata(raw_track) or raw_track
+            if self.spotify is not None and state.current_track_uri:
                 state.has_like = self.spotify.is_liked(state.current_track_uri)
             else:
                 state.has_like = False
+        elif not raw_track:
+            state.last_track = ""
+            state.display_track = ""

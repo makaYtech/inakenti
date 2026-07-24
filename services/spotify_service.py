@@ -79,3 +79,18 @@ class SpotifyService:
         except Exception as e:
             print(f"Error checking like: {e}")
             return False
+    
+    def get_current_track_meta(self):
+        """Возвращает (artist, title) с настоящими символами (без романизации),
+        либо None если нет воспроизведения / ошибка."""
+        try:
+            current = self.sp.current_playback()
+            if not current or not current.get("item"):
+                return None
+            item = current["item"]
+            title = item.get("name", "")
+            artists = ", ".join(a.get("name", "") for a in item.get("artists", []))
+            return artists, title
+        except Exception as e:
+            print(f"Error fetching current track from API: {e}")
+            return None

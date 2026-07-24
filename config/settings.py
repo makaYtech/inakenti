@@ -22,7 +22,7 @@ SPOTIFY_REDIRECT_URI = os.getenv("SPOTIFY_REDIRECT_URI")
 SPOTIFY_PROXY = os.getenv("SPOTIFY_PROXY")
 SPOTIFY_SCOPE = (
     "user-library-modify user-follow-modify playlist-modify-public "
-    "user-library-read user-read-currently-playing"
+    "user-library-read user-read-currently-playing user-read-playback-state"
 )
 SPOTIFY_CACHE_PATH = os.path.expanduser("~/spotify_cache")
 

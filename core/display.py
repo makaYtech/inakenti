@@ -24,30 +24,27 @@ def marquee(text: str, offset: int, width: int) -> tuple[str, int]:
 
 def build_player_display(state, player) -> str:
     """Сформировать строку для LCD в режиме PLAYER."""
-    track_meta = player.get_metadata()
-    track = transliterate(track_meta) if track_meta else ""
+    track = state.display_track
     status = player.get_status()
     volume = player.get_volume()
 
     icon = " "
     if status == "Playing":
-        icon = " \x84"  # символ Play
+        icon = " \x84"
     elif status == "Paused":
-        icon = " \x82"  # символ Pause
+        icon = " \x82"
 
     vol_str = f"{volume}%" if volume != "--" else "--%"
 
     frame, new_offset = marquee(track, state.scroll_offset, 16)
-    state.scroll_offset = new_offset  # обновим offset в состоянии (имеет побочный эффект)
+    state.scroll_offset = new_offset
 
     l0 = frame.ljust(16)
-    
     if state.volume_change:
         l1 = f"{icon}  \x93 CVol: {vol_str}".ljust(16)
     else:
         l1 = f"{icon}  \x93  Vol: {vol_str}".ljust(16)
 
-    # Замена иконки громкости на другую, если трек лайкнут
     if state.has_like:
         l1 = l1.replace('\x93', '\x92', 1)
 

@@ -38,13 +38,6 @@ def _write_env(path: Path, values: dict):
 
 
 def ensure_spotify_env() -> bool:
-    """
-    Проверяет .env. Если не хватает обязательных переменных и запуск
-    интерактивный — спрашивает и сохраняет. Опциональные (SPOTIFY_PROXY)
-    можно пропустить пустым вводом. Возвращает True, если конфиг готов
-    к использованию, False — если Spotify придётся оставить выключенным
-    на этот запуск.
-    """
     existing = _read_existing(ENV_PATH)
     missing_required = [(n, d) for n, d in REQUIRED_VARS if not existing.get(n)]
 
@@ -54,30 +47,32 @@ def ensure_spotify_env() -> bool:
     if not sys.stdin.isatty():
         names = ", ".join(n for n, _ in missing_required)
         print(f"[env] Не хватает переменных для Spotify: {names}. "
-              f"Spotify отключён. Запусти из терминала, чтобы настроить .env интерактивно.")
+              f"Spotify отключён (неинтерактивный запуск).")
         return False
 
     print("=" * 50)
-    print("Не найден .env (или он неполный) — нужна настройка Spotify API.")
-    print("Данные бери здесь: https://developer.spotify.com/dashboard")
-    print("=" * 50)
+    print("Spotify API не настроен (.env отсутствует или неполный).")
+    answer = input(
+        "Настроить сейчас? Данные из https://developer.spotify.com/dashboard [y/N]: "
+    ).strip().lower()
+
+    if answer not in ("y", "yes", "д", "да"):
+        print("[env] Пропущено. Программа запустится без Spotify "
+              "(лайки и настоящие названия треков будут недоступны).")
+        return False
 
     answers = dict(existing)
-
-    # --- обязательные ---
     for name, desc in missing_required:
-        while True:
-            value = input(f"{name} ({desc}): ").strip()
-            if value:
-                answers[name] = value
-                break
-            print("  Пусто нельзя, введи значение.")
+        value = input(f"{name} ({desc}) [Enter — прервать настройку]: ").strip()
+        if not value:
+            print("[env] Настройка Spotify прервана, продолжаем без неё.")
+            return False
+        answers[name] = value
 
-    # --- опциональные (можно пропустить Enter'ом) ---
     for name, desc in OPTIONAL_VARS:
         if existing.get(name):
-            continue  # уже задано раньше — не спрашиваем повторно
-        value = input(f"{name} ({desc}): ").strip()
+            continue
+        value = input(f"{name} ({desc}) [Enter — пропустить]: ").strip()
         if value:
             answers[name] = value
 
